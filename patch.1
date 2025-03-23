@@ -1,4 +1,4 @@
-.\"	$OpenBSD: patch.1,v 1.30 2015/07/26 14:32:19 millert Exp $
+.\"	$OpenBSD: patch.1,v 1.37 2024/03/22 19:22:23 jcs Exp $
 .\" Copyright 1986, Larry Wall
 .\"
 .\" Redistribution and use in source and binary forms, with or without
@@ -19,7 +19,7 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.Dd $Mdocdate: July 26 2015 $
+.Dd $Mdocdate: March 22 2024 $
 .Dt PATCH 1
 .Os
 .Sh NAME
@@ -37,7 +37,7 @@
 .Op Fl o Ar out-file
 .Op Fl p Ar strip-count
 .Op Fl r Ar rej-name
-.Op Fl V Cm t | nil | never
+.Op Fl V Cm t | nil | never | none
 .Op Fl x Ar number
 .Op Fl z Ar backup-ext
 .Op Fl Fl posix
@@ -47,10 +47,12 @@
 .Pf \*(Lt Ar patchfile
 .Sh DESCRIPTION
 .Nm
-will take a patch file containing any of the four forms of difference
+takes the text file
+.Ar patchfile
+containing any of the four forms of difference
 listing produced by the
 .Xr diff 1
-program and apply those differences to an original file,
+program and applies those differences to an original text file,
 producing a patched version.
 If
 .Ar patchfile
@@ -64,12 +66,6 @@ will attempt to determine the type of the diff listing, unless overruled by a
 or
 .Fl u
 option.
-Context diffs (old-style, new-style, and unified) and
-normal diffs are applied directly by the
-.Nm
-program itself, whereas ed diffs are simply fed to the
-.Xr ed 1
-editor via a pipe.
 .Pp
 If the
 .Ar patchfile
@@ -105,7 +101,7 @@ This is equivalent to specifying
 This option is currently the default, unless
 .Fl -posix
 is specified.
-.It Fl C , Fl Fl check
+.It Fl C , Fl Fl check , Fl Fl dry-run
 Checks that the patch would apply cleanly, but does not modify anything.
 .It Fl c , Fl Fl context
 Forces
@@ -157,7 +153,7 @@ the number of lines of context in the context diff, ordinarily 3.
 .It Fl f , Fl Fl force
 Forces
 .Nm
-to assume that the user knows exactly what he or she is doing, and to not
+to assume that the user knows exactly what they are doing, and to not
 ask any questions.
 It assumes the following:
 skip patches for which a file to patch can't be found;
@@ -174,7 +170,6 @@ for that.
 .Xc
 Causes the next argument to be interpreted as the input file name
 (i.e. a patchfile).
-This option may be specified multiple times.
 .It Fl l , Fl Fl ignore-whitespace
 Causes the pattern matching to be done loosely, in case the tabs and
 spaces have been munged in your input file.
@@ -294,8 +289,8 @@ Forces
 .Nm
 to interpret the patch file as a unified context diff (a unidiff).
 .It Xo
-.Fl V Cm t | nil | never ,
-.Fl Fl version-control Cm t | nil | never
+.Fl V Cm t | nil | never | none ,
+.Fl Fl version-control Cm t | nil | never | none
 .Xc
 Causes the next argument to be interpreted as a method for creating
 backup file names.
@@ -326,6 +321,8 @@ Make numbered backups of files that already have them,
 simple backups of the others.
 .It Cm never , simple
 Always make simple backups.
+.It Cm none
+Do not make backups.
 .El
 .It Fl v , Fl Fl version
 Causes
@@ -608,7 +605,7 @@ One or more lines were written to a reject file.
 An error occurred.
 .El
 .Pp
-When applying a set of patches in a loop it behooves you to check this
+When applying a set of patches in a loop, it behooves you to check this
 exit status so you don't apply a later patch to a partially patched file.
 .Sh DIAGNOSTICS
 Too many to list here, but generally indicative that

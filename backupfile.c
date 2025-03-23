@@ -1,4 +1,4 @@
-/*	$OpenBSD: backupfile.c,v 1.21 2013/11/26 13:19:07 deraadt Exp $	*/
+/*	$OpenBSD: backupfile.c,v 1.23 2024/03/22 19:22:23 jcs Exp $	*/
 
 /*
  * backupfile.c -- make Emacs style backup file names Copyright (C) 1990 Free
@@ -15,7 +15,6 @@
 /*
  * David MacKenzie <djm@ai.mit.edu>. Some algorithms adapted from GNU Emacs.
  */
-
 
 #include <ctype.h>
 #include <dirent.h>
@@ -54,21 +53,32 @@ static void	invalid_arg(const char *, const char *, int);
 char *
 find_backup_file_name(const char *file)
 {
-	char	*dir, *base_versions;
+	char	*dir, *base_versions, *tmp_file;
 	int	highest_backup;
 
 	if (backup_type == simple)
 		return concat(file, simple_backup_suffix);
-	base_versions = concat(basename(file), ".~");
+	tmp_file = strdup(file);
+	if (tmp_file == NULL)
+		return NULL;
+	base_versions = concat(basename(tmp_file), ".~");
+	free(tmp_file);
 	if (base_versions == NULL)
 		return NULL;
-	dir = dirname(file);
+	tmp_file = strdup(file);
+	if (tmp_file == NULL) {
+		free(base_versions);
+		return NULL;
+	}
+	dir = dirname(tmp_file);
 	if (dir == NULL) {
 		free(base_versions);
+		free(tmp_file);
 		return NULL;
 	}
 	highest_backup = max_backup_version(base_versions, dir);
 	free(base_versions);
+	free(tmp_file);
 	if (backup_type == numbered_existing && highest_backup == 0)
 		return concat(file, simple_backup_suffix);
 	return make_version_name(file, highest_backup + 1);
@@ -96,7 +106,7 @@ max_backup_version(const char *file, const char *dir)
 	file_name_length = strlen(file);
 
 	while ((dp = readdir(dirp)) != NULL) {
-		if (D_NAMLEN(dp) <= file_name_length)
+		if (dp->d_namlen <= file_name_length)
 			continue;
 
 		this_version = version_number(file, dp->d_name, file_name_length);
@@ -210,11 +220,11 @@ invalid_arg(const char *kind, const char *value, int problem)
 }
 
 static const char *backup_args[] = {
-	"never", "simple", "nil", "existing", "t", "numbered", 0
+	"none", "never", "simple", "nil", "existing", "t", "numbered", 0
 };
 
 static enum backup_type backup_types[] = {
-	simple, simple, numbered_existing,
+	none, simple, simple, numbered_existing,
 	numbered_existing, numbered, numbered
 };
 

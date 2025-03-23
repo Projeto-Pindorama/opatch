@@ -1,4 +1,4 @@
-/*	$OpenBSD: pch.c,v 1.59 2017/12/20 21:08:06 tb Exp $	*/
+/*	$OpenBSD: pch.c,v 1.66 2023/07/12 15:45:34 florian Exp $	*/
 
 /*
  * patch - a program to apply diffs to original files
@@ -41,7 +41,6 @@
 #include "common.h"
 #include "util.h"
 #include "pch.h"
-#include "pathnames.h"
 
 /* Patch (diff listing) abstract type. */
 
@@ -57,7 +56,7 @@ static LINENUM	p_end = -1;	/* last line in hunk */
 static LINENUM	p_max;		/* max allowed value of p_end */
 static LINENUM	p_context = 3;	/* # of context lines */
 static char	**p_line = NULL;/* the text of the hunk */
-static short	*p_len = NULL;	/* length of each line */
+static ssize_t	*p_len = NULL;	/* length of each line */
 static char	*p_char = NULL;	/* +, -, and ! */
 static int	hunkmax = INITHUNKMAX;	/* size of above arrays to begin with */
 static int	p_indent;	/* indent to patch */
@@ -104,7 +103,7 @@ open_patch_file(const char *filename)
 		pfp = fopen(TMPPATNAME, "w");
 		if (pfp == NULL)
 			pfatal("can't create %s", TMPPATNAME);
-		while (fgets(buf, sizeof buf, stdin) != NULL)
+		while (getline(&buf, &bufsz, stdin) != -1)
 			fputs(buf, pfp);
 		fclose(pfp);
 		filename = TMPPATNAME;
@@ -128,7 +127,7 @@ set_hunkmax(void)
 	if (p_line == NULL)
 		p_line = calloc((size_t) hunkmax, sizeof(char *));
 	if (p_len == NULL)
-		p_len = calloc((size_t) hunkmax, sizeof(short));
+		p_len = calloc((size_t) hunkmax, sizeof(ssize_t));
 	if (p_char == NULL)
 		p_char = calloc((size_t) hunkmax, sizeof(char));
 }
@@ -141,7 +140,7 @@ grow_hunkmax(void)
 {
 	int		new_hunkmax;
 	char		**new_p_line;
-	short		*new_p_len;
+	ssize_t		*new_p_len;
 	char		*new_p_char;
 
 	new_hunkmax = hunkmax * 2;
@@ -153,7 +152,7 @@ grow_hunkmax(void)
 	if (new_p_line == NULL)
 		free(p_line);
 
-	new_p_len = reallocarray(p_len, new_hunkmax, sizeof(short));
+	new_p_len = reallocarray(p_len, new_hunkmax, sizeof(ssize_t));
 	if (new_p_len == NULL)
 		free(p_len);
 
@@ -267,7 +266,7 @@ intuit_diff_type(void)
 		this_line = ftello(pfp);
 		indent = 0;
 		p_input_line++;
-		if (fgets(buf, sizeof buf, pfp) == NULL) {
+		if (getline(&buf, &bufsz, pfp) == -1) {
 			if (first_command_line >= 0) {
 				/* nothing but deletes!? */
 				p_start = first_command_line;
@@ -434,7 +433,7 @@ next_intuit_at(off_t file_pos, LINENUM file_line)
 static void
 skip_to(off_t file_pos, LINENUM file_line)
 {
-	char	*ret;
+	int	ret;
 
 	if (p_base > file_pos)
 		fatal("Internal error: seek %lld>%lld\n",
@@ -443,8 +442,8 @@ skip_to(off_t file_pos, LINENUM file_line)
 		fseeko(pfp, p_base, SEEK_SET);
 		say("The text leading up to this was:\n--------------------------\n");
 		while (ftello(pfp) < file_pos) {
-			ret = fgets(buf, sizeof buf, pfp);
-			if (ret == NULL)
+			ret = getline(&buf, &bufsz, pfp);
+			if (ret == -1)
 				fatal("Unexpected end of file\n");
 			say("|%s", buf);
 		}
@@ -496,14 +495,15 @@ another_hunk(void)
 	LINENUM	fillcnt;			/* #lines of missing ptrn or repl */
 	LINENUM	fillsrc;			/* index of first line to copy */
 	LINENUM	filldst;			/* index of first missing line */
-	bool	ptrn_spaces_eaten;		/* ptrn was slightly misformed */
+	bool	ptrn_spaces_eaten;		/* ptrn was slightly malformed */
 	bool	repl_could_be_missing;		/* no + or ! lines in this hunk */
 	bool	repl_missing;			/* we are now backtracking */
 	off_t	repl_backtrack_position;	/* file pos of first repl line */
 	LINENUM	repl_patch_line;		/* input line number for same */
 	LINENUM	ptrn_copiable;			/* # of copiable lines in ptrn */
-	char	*s, *ret;
+	char	*s;
 	int	context = 0;
+	int	ret;
 
 	while (p_end >= 0) {
 		if (p_end == p_efake)
@@ -527,9 +527,9 @@ another_hunk(void)
 		repl_patch_line = 0;
 		ptrn_copiable = 0;
 
-		ret = pgets(buf, sizeof buf, pfp);
+		ret = pgetline(&buf, &bufsz, pfp);
 		p_input_line++;
-		if (ret == NULL || strnNE(buf, "********", 8)) {
+		if (ret == -1 || strnNE(buf, "********", 8)) {
 			next_intuit_at(line_beginning, p_input_line);
 			return false;
 		}
@@ -537,12 +537,12 @@ another_hunk(void)
 		p_hunk_beg = p_input_line + 1;
 		while (p_end < p_max) {
 			line_beginning = ftello(pfp);
-			ret = pgets(buf, sizeof buf, pfp);
+			ret = pgetline(&buf, &bufsz, pfp);
 			p_input_line++;
-			if (ret == NULL) {
+			if (ret == -1) {
 				if (p_max - p_end < 4) {
 					/* assume blank lines got chopped */
-					strlcpy(buf, "  \n", sizeof buf);
+					strlcpy(buf, "  \n", bufsz);
 				} else {
 					if (repl_beginning && repl_could_be_missing) {
 						repl_missing = true;
@@ -696,7 +696,7 @@ another_hunk(void)
 				repl_could_be_missing = false;
 		change_line:
 				if (buf[1] == '\n' && canonicalize)
-					strlcpy(buf + 1, " \n", sizeof buf - 1);
+					strlcpy(buf + 1, " \n", bufsz - 1);
 				if (!isspace((unsigned char)buf[1]) &&
 				    buf[1] != '>' && buf[1] != '<' &&
 				    repl_beginning && repl_could_be_missing) {
@@ -862,9 +862,9 @@ hunk_done:
 		LINENUM	filldst;	/* index of new lines */
 		char	ch;
 
-		ret = pgets(buf, sizeof buf, pfp);
+		ret = pgetline(&buf, &bufsz, pfp);
 		p_input_line++;
-		if (ret == NULL || strnNE(buf, "@@ -", 4)) {
+		if (ret == -1 || strnNE(buf, "@@ -", 4)) {
 			next_intuit_at(line_beginning, p_input_line);
 			return false;
 		}
@@ -901,7 +901,7 @@ hunk_done:
 		fillsrc = 1;
 		filldst = fillsrc + p_ptrn_lines;
 		p_end = filldst + p_repl_lines;
-		snprintf(buf, sizeof buf, "*** %ld,%ld ****\n", p_first,
+		snprintf(buf, bufsz, "*** %ld,%ld ****\n", p_first,
 		    p_first + p_ptrn_lines - 1);
 		p_line[0] = savestr(buf);
 		if (out_of_mem) {
@@ -909,7 +909,7 @@ hunk_done:
 			return false;
 		}
 		p_char[0] = '*';
-		snprintf(buf, sizeof buf, "--- %ld,%ld ----\n", p_newfirst,
+		snprintf(buf, bufsz, "--- %ld,%ld ----\n", p_newfirst,
 		    p_newfirst + p_repl_lines - 1);
 		p_line[filldst] = savestr(buf);
 		if (out_of_mem) {
@@ -922,12 +922,12 @@ hunk_done:
 		p_hunk_beg = p_input_line + 1;
 		while (fillsrc <= p_ptrn_lines || filldst <= p_end) {
 			line_beginning = ftello(pfp);
-			ret = pgets(buf, sizeof buf, pfp);
+			ret = pgetline(&buf, &bufsz, pfp);
 			p_input_line++;
-			if (ret == NULL) {
+			if (ret == -1) {
 				if (p_max - filldst < 3) {
 					/* assume blank lines got chopped */
-					strlcpy(buf, " \n", sizeof buf);
+					strlcpy(buf, " \n", bufsz);
 				} else {
 					fatal("unexpected end of file in patch\n");
 				}
@@ -1026,9 +1026,9 @@ hunk_done:
 		off_t	line_beginning = ftello(pfp);
 
 		p_context = 0;
-		ret = pgets(buf, sizeof buf, pfp);
+		ret = pgetline(&buf, &bufsz, pfp);
 		p_input_line++;
-		if (ret == NULL || !isdigit((unsigned char)*buf)) {
+		if (ret == -1 || !isdigit((unsigned char)*buf)) {
 			next_intuit_at(line_beginning, p_input_line);
 			return false;
 		}
@@ -1064,7 +1064,7 @@ hunk_done:
 			    p_end, p_input_line, buf);
 		while (p_end >= hunkmax)
 			grow_hunkmax();
-		snprintf(buf, sizeof buf, "*** %ld,%ld\n", p_first,
+		snprintf(buf, bufsz, "*** %ld,%ld\n", p_first,
 		    p_first + p_ptrn_lines - 1);
 		p_line[0] = savestr(buf);
 		if (out_of_mem) {
@@ -1073,9 +1073,9 @@ hunk_done:
 		}
 		p_char[0] = '*';
 		for (i = 1; i <= p_ptrn_lines; i++) {
-			ret = pgets(buf, sizeof buf, pfp);
+			ret = pgetline(&buf, &bufsz, pfp);
 			p_input_line++;
-			if (ret == NULL)
+			if (ret == -1)
 				fatal("unexpected end of file in patch at line %ld\n",
 				    p_input_line);
 			if (*buf != '<')
@@ -1095,16 +1095,16 @@ hunk_done:
 			(p_line[i - 1])[p_len[i - 1]] = 0;
 		}
 		if (hunk_type == 'c') {
-			ret = pgets(buf, sizeof buf, pfp);
+			ret = pgetline(&buf, &bufsz, pfp);
 			p_input_line++;
-			if (ret == NULL)
+			if (ret == -1)
 				fatal("unexpected end of file in patch at line %ld\n",
 				    p_input_line);
 			if (*buf != '-')
 				fatal("--- expected at line %ld of patch\n",
 				    p_input_line);
 		}
-		snprintf(buf, sizeof(buf), "--- %ld,%ld\n", min, max);
+		snprintf(buf, bufsz, "--- %ld,%ld\n", min, max);
 		p_line[i] = savestr(buf);
 		if (out_of_mem) {
 			p_end = i - 1;
@@ -1112,9 +1112,9 @@ hunk_done:
 		}
 		p_char[i] = '=';
 		for (i++; i <= p_end; i++) {
-			ret = pgets(buf, sizeof buf, pfp);
+			ret = pgetline(&buf, &bufsz, pfp);
 			p_input_line++;
-			if (ret == NULL)
+			if (ret == -1)
 				fatal("unexpected end of file in patch at line %ld\n",
 				    p_input_line);
 			if (*buf != '>')
@@ -1161,13 +1161,16 @@ hunk_done:
 /*
  * Input a line from the patch file, worrying about indentation.
  */
-char *
-pgets(char *bf, int sz, FILE *fp)
+int
+pgetline(char **bf, size_t *sz, FILE *fp)
 {
-	char	*s, *ret = fgets(bf, sz, fp);
+	char	*s;
 	int	indent = 0;
+	int	ret;
 
-	if (p_indent && ret != NULL) {
+	ret = getline(bf, sz, fp);
+
+	if (p_indent && ret != -1) {
 		for (s = buf;
 		    indent < p_indent && (*s == ' ' || *s == '\t' || *s == 'X');
 		    s++) {
@@ -1176,8 +1179,8 @@ pgets(char *bf, int sz, FILE *fp)
 			else
 				indent++;
 		}
-		if (buf != s && strlcpy(buf, s, sizeof(buf)) >= sizeof(buf))
-			fatal("buffer too small in pgets()\n");
+		if (buf != s && strlcpy(buf, s, bufsz) >= bufsz)
+			fatal("buffer too small in pgetline()\n");
 	}
 	return ret;
 }
@@ -1189,7 +1192,7 @@ bool
 pch_swap(void)
 {
 	char	**tp_line;	/* the text of the hunk */
-	short	*tp_len;	/* length of each line */
+	ssize_t	*tp_len;	/* length of each line */
 	char	*tp_char;	/* +, -, and ! */
 	LINENUM	i;
 	LINENUM	n;
@@ -1346,7 +1349,7 @@ pch_context(void)
 /*
  * Return the length of a particular patch line.
  */
-short
+ssize_t
 pch_line_len(LINENUM line)
 {
 	return p_len[line];
@@ -1419,7 +1422,7 @@ compare_names(const struct file_name *names, bool assume_exists)
 {
 	size_t min_components, min_baselen, min_len, tmp;
 	char *best = NULL;
-	char *path;
+	char *path, *bn;
 	int i;
 
 	/*
@@ -1440,7 +1443,10 @@ compare_names(const struct file_name *names, bool assume_exists)
 			min_components = tmp;
 			best = path;
 		}
-		if ((tmp = strlen(basename(path))) > min_baselen)
+		bn = basename(path);
+		if (bn == NULL)
+			continue;
+		if ((tmp = strlen(bn)) > min_baselen)
 			continue;
 		if (tmp < min_baselen) {
 			min_baselen = tmp;
@@ -1478,7 +1484,8 @@ num_components(const char *path)
 	size_t n;
 	const char *cp;
 
-	for (n = 0, cp = path; (cp = strchr(cp, '/')) != NULL; n++, cp++) {
+	for (n = 0, cp = path; (cp = strchr(cp, '/')) != NULL; n++) {
+		cp++;
 		while (*cp == '/')
 			cp++;		/* skip consecutive slashes */
 	}
