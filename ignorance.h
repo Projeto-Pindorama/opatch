@@ -87,7 +87,7 @@ inline char *fgetln(FILE *restrict f, size_t *lenp) {
 #include <stdarg.h>
 /* err.h functions. */
 #define __vwarncx(fmt, sep, ...) \
-	fprintf(stderr, "%s: ", __progname); \
+	fprintf(stderr, "%s: ", getprogname()); \
 	if (fmt) { \
 		fprintf(stderr, fmt, ##__VA_ARGS__); \
 		fprintf(stderr, "%s", sep); \
