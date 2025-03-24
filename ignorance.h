@@ -4,7 +4,9 @@
 /*
  * Copyright (C) 2025: Luiz Antônio Rangel (takusuman)
  *
- * SPDX-License-Identifier: Unlicense 
+ * SPDX-License-Identifier: Unlicense
+ *
+ * Partly based off "compat.h" header at Duncaen/lobase.
  */
 
 #ifndef OpenBSD
@@ -16,7 +18,7 @@
 
 /* A false pledge(). */
 #ifndef HAVE_PLEDGE
-#define pledge(x, y) 0 
+#define pledge(x, y) 0
 #else
 int pledge(const char *, const char *[]);
 #endif /* !HAVE_PLEDGE */
@@ -43,4 +45,39 @@ void __dead setprogname(const char *progname);
 #else
 #define D_NAMLEN(e) (e)->d_namlen
 #endif
+
+/* fgetln() implementation. */
+inline char *fgetln(FILE *restrict f, size_t *lenp) {
+	/* Fail if we can't get access to stdio. */
+	if (pledge("stdio", NULL) == -1)
+		return NULL;
+
+	char c = '\0',
+	     *buf = NULL;
+	size_t bufsiz = 0,
+	       len = 0;
+
+	if (buf == NULL) {
+		bufsiz = BUFSIZ;
+		buf = malloc(bufsiz);
+		if (buf == NULL) return NULL; /* Can't allocate */
+	}
+
+	for (; (c = getc(f)); len++) {
+		if (c == EOF) return NULL;
+
+		buf[len] = c;
+		switch (c) {
+			case '\n':
+				break;
+			default:
+				continue;
+		}
+		break;
+	}
+	*lenp = len;
+	*lenp += 1;
+
+	return buf;
+}
 #endif
