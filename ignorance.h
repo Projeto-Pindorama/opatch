@@ -9,7 +9,7 @@
  * Partly based off "compat.h" header at Duncaen/lobase.
  */
 
-#ifndef OpenBSD
+#ifndef __OpenBSD__
 #ifdef __GNUC__
 #define __dead	__attribute__((__noreturn__))
 #else
@@ -30,8 +30,8 @@ char *__progname = NULL;
 #define setprogname(x) (__progname = strdup(x))
 #define getprogname(x) __progname
 #else
-const char *getprogname(void);
 void __dead setprogname(const char *progname);
+const char *getprogname(void);
 #endif /* !HAVE_SETPROGNAME */
 
 /* Get a directory entry name length. */
@@ -46,9 +46,71 @@ void __dead setprogname(const char *progname);
 #define D_NAMLEN(e) (e)->d_namlen
 #endif
 
-/* fgetln() implementation. */
+#include <errno.h>
+#include <limits.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+inline long long
+strtonum(const char numstr[], long long minval, long long maxval,
+    const char *errstr_p[]) {
+	long long r = 0;
+	char *invalid = NULL;
+	*errstr_p = NULL;
+	errno = 0; /* Success */
+
+	if (minval > maxval) {
+invalid:
+		errno = EINVAL;
+		*errstr_p = strerror(errno);
+		r = 0;
+		return r;
+	}
+	r = strtoll(numstr, &invalid, 10);
+	switch (*invalid) {
+		case '\0':
+			break;
+		case *numstr:
+		default:
+			/*
+			 * Hope this applies to cases where
+			 * invalid[] is equal to numstr.
+			 */
+			goto invalid;
+	}
+	switch (errno) {
+		ERANGE:
+			char *errnostr = NULL;
+			errnostr = strerror(errno);
+			if (r == LLONG_MIN) 
+				sprintf(*errstr_p, "%s: %s is less than LLONG_MIN (%lld)",
+						errnostr, numstr, LLONG_MIN);
+			else if (r == LLONG_MAX)
+				sprintf(*errstr_p, "%s: %s is more than LLONG_MAX (%lld)",
+						errnostr, numstr, LLONG_MAX);
+			r = 0;
+		default:
+			if (r < minval && maxval < r) {
+				errno = ERANGE;
+				char *errnostr = NULL;
+				errnostr = strerror(errno);
+				if (r < minval)
+					sprintf(*errstr_p,
+						"%s: %s is less than the minimal value of %lld",
+						errnostr, numstr, minval);
+				else if (maxval < r)
+					sprintf(*errstr_p,
+						"%s: %s is larger than the maximum value of %lld",
+						errnostr, numstr, maxval);
+				r = 0;
+			}
+	}
+
+	return r;
+}
+
+/* fgetln() implementation. */
 inline char *fgetln(FILE *restrict f, size_t *lenp) {
 	/* Fail if we can't get access to stdio. */
 	if (pledge("stdio", NULL) == -1)
@@ -83,8 +145,6 @@ inline char *fgetln(FILE *restrict f, size_t *lenp) {
 	return buf;
 }
 
-#include <errno.h>
-#include <stdarg.h>
 /* err.h functions. */
 #define __vwarncx(fmt, sep, ...) \
 	fprintf(stderr, "%s: ", getprogname()); \
@@ -102,9 +162,9 @@ inline char *fgetln(FILE *restrict f, size_t *lenp) {
 
 #define vwarn(fmt, ...) vwarnc(errno, fmt, ##__VA_ARGS__)
 
-#define warnc(wcode, fmt, ...) vwarnc(wcode, fmt, ##__VA_ARGS__);
+#define warnc(wcode, fmt, ...) vwarnc(wcode, fmt, ##__VA_ARGS__)
 
-#define warnx(fmt, ...) vwarnx(fmt, ##__VA_ARGS__);
+#define warnx(fmt, ...) vwarnx(fmt, ##__VA_ARGS__)
 
-#define warn(fmt, ...) vwarn(fmt, ##__VA_ARGS__);
+#define warn(fmt, ...) vwarn(fmt, ##__VA_ARGS__)
 #endif
