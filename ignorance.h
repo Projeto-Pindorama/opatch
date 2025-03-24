@@ -13,7 +13,7 @@
 #ifdef __GNUC__
 #define __dead	__attribute__((__noreturn__))
 #else
-#define __dead /* Não há nada. */
+#define __dead /* Não há nada, nada há. */
 #endif
 
 /* A false pledge(). */
@@ -26,9 +26,9 @@ int pledge(const char *, const char *[]);
 /* Functions to set the program name. */
 #ifndef HAVE_SETPROGNAME
 #include <string.h>
-char *_progname = NULL;
-#define setprogname(x) (_progname = strdup(x))
-#define getprogname(x) _progname
+char *__progname = NULL;
+#define setprogname(x) (__progname = strdup(x))
+#define getprogname(x) __progname
 #else
 const char *getprogname(void);
 void __dead setprogname(const char *progname);
@@ -47,6 +47,8 @@ void __dead setprogname(const char *progname);
 #endif
 
 /* fgetln() implementation. */
+#include <stdio.h>
+#include <stdlib.h>
 inline char *fgetln(FILE *restrict f, size_t *lenp) {
 	/* Fail if we can't get access to stdio. */
 	if (pledge("stdio", NULL) == -1)
@@ -79,5 +81,51 @@ inline char *fgetln(FILE *restrict f, size_t *lenp) {
 	*lenp += 1;
 
 	return buf;
+}
+
+#include <errno.h>
+#include <stdarg.h>
+/* err.h functions. */
+inline void __dead __vwarncx(const char *fmt, char *sep, va_list ap) {
+	fprintf(stderr, "%s: ", __progname);
+	if (fmt) {
+		vfprintf(stderr, fmt, ap);
+		fprintf(stderr, "%s", sep);
+	}
+}
+
+inline void __dead vwarnx(const char *fmt, va_list ap) {
+	__vwarncx(fmt, "\n", ap);
+}
+
+inline void __dead vwarnc(int wcode, const char *fmt, va_list ap) {
+	__vwarncx(fmt, ": ", ap);
+	fputs(strerror(wcode), stderr);
+}
+
+inline void __dead vwarn(const char *fmt, va_list ap) {
+	int sverrno = errno;
+	vwarnc(sverrno, fmt, ap);
+}
+
+inline void __dead warnc(int wcode, const char *fmt, ...) {
+	va_list	ap;
+	va_start(ap, fmt);
+	vwarnc(wcode, fmt, ap);
+	va_end(ap);
+}
+
+inline void __dead warnx(const char *fmt, ...) {
+	va_list	ap;
+	va_start(ap, fmt);
+	vwarnx(fmt, ap);
+	va_end(ap);
+}
+
+inline void __dead warn(const char *fmt, ...) {
+	va_list	ap;
+	va_start(ap, fmt);
+	vwarn(fmt, ap);
+	va_end(ap);
 }
 #endif
