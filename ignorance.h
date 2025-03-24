@@ -86,46 +86,24 @@ inline char *fgetln(FILE *restrict f, size_t *lenp) {
 #include <errno.h>
 #include <stdarg.h>
 /* err.h functions. */
-inline void __dead __vwarncx(const char *fmt, char *sep, va_list ap) {
-	fprintf(stderr, "%s: ", __progname);
-	if (fmt) {
-		vfprintf(stderr, fmt, ap);
-		fprintf(stderr, "%s", sep);
+#define __vwarncx(fmt, sep, ...) \
+	fprintf(stderr, "%s: ", __progname); \
+	if (fmt) { \
+		fprintf(stderr, fmt, ##__VA_ARGS__); \
+		fprintf(stderr, "%s", sep); \
 	}
-}
 
-inline void __dead vwarnx(const char *fmt, va_list ap) {
-	__vwarncx(fmt, "\n", ap);
-}
+#define vwarnx(fmt, ...) __vwarncx(fmt, "\n", ##__VA_ARGS__)
 
-inline void __dead vwarnc(int wcode, const char *fmt, va_list ap) {
-	__vwarncx(fmt, ": ", ap);
-	fputs(strerror(wcode), stderr);
-}
+#define vwarnc(wcode, fmt, ...) \
+	__vwarncx(fmt, ": ", ##__VA_ARGS__); \
+	fputs(strerror(wcode), stderr)
 
-inline void __dead vwarn(const char *fmt, va_list ap) {
-	int sverrno = errno;
-	vwarnc(sverrno, fmt, ap);
-}
+#define vwarn(fmt, ...) vwarnc(errno, fmt, ##__VA_ARGS__)
 
-inline void __dead warnc(int wcode, const char *fmt, ...) {
-	va_list	ap;
-	va_start(ap, fmt);
-	vwarnc(wcode, fmt, ap);
-	va_end(ap);
-}
+#define warnc(wcode, fmt, ...) vwarnc(wcode, fmt, ##__VA_ARGS__);
 
-inline void __dead warnx(const char *fmt, ...) {
-	va_list	ap;
-	va_start(ap, fmt);
-	vwarnx(fmt, ap);
-	va_end(ap);
-}
+#define warnx(fmt, ...) vwarnx(fmt, ##__VA_ARGS__);
 
-inline void __dead warn(const char *fmt, ...) {
-	va_list	ap;
-	va_start(ap, fmt);
-	vwarn(fmt, ap);
-	va_end(ap);
-}
+#define warn(fmt, ...) vwarn(fmt, ##__VA_ARGS__);
 #endif
