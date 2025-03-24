@@ -97,7 +97,8 @@ inline char *fgetln(FILE *restrict f, size_t *lenp) {
 
 #define vwarnc(wcode, fmt, ...) \
 	__vwarncx(fmt, ": ", ##__VA_ARGS__); \
-	fputs(strerror(wcode), stderr)
+	fputs(strerror(wcode), stderr); \
+	fputc('\n', stderr)
 
 #define vwarn(fmt, ...) vwarnc(errno, fmt, ##__VA_ARGS__)
 
