@@ -110,8 +110,8 @@ static inline char *fgetln(FILE *restrict f, size_t *lenp) {
 
 	if (buf == NULL) {
 		bufsiz = BUFSIZ;
-		buf = malloc(bufsiz);
-		if (buf == NULL) return NULL; /* Can't allocate */
+		if ((buf = malloc(bufsiz)) == NULL)
+			return NULL; /* Can't allocate. */
 	}
 
 	for (; (c = getc(f)); len++) {
@@ -121,9 +121,6 @@ static inline char *fgetln(FILE *restrict f, size_t *lenp) {
 			nbufsiz = (bufsiz + 256);
 			nbuf = realloc(buf, nbufsiz);
 			if (nbuf == NULL) {
-				int realloc_errno = errno;
-				free(buf);
-				errno = realloc_errno;
 				buf = NULL;
 				len = -1; /* So it will be 0 later. */
 				break;
@@ -152,7 +149,7 @@ static inline char *fgetln(FILE *restrict f, size_t *lenp) {
 	fprintf(stderr, "%s: ", getprogname()); \
 	if (fmt) { \
 		fprintf(stderr, fmt, ##__VA_ARGS__); \
-		fprintf(stderr, "%s", sep); \
+		fputs(sep, stderr); \
 	}
 
 #define vwarnx(fmt, ...) __vwarncx(fmt, "\n", ##__VA_ARGS__)
