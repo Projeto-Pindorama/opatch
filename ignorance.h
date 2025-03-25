@@ -52,61 +52,45 @@ const char *getprogname(void);
 #include <stdio.h>
 #include <stdlib.h>
 
-inline long long
-strtonum(const char numstr[], long long minval, long long maxval,
-    const char *errstr_p[]) {
+static inline long long strtonum(const char numstr[],
+		long long minval, long long maxval,
+		const char *errstrp[]) {
 	long long r = 0;
 	char *invalid = NULL;
-	*errstr_p = NULL;
+	*errstrp = NULL;
 	errno = 0; /* Success */
 
 	if (minval > maxval) {
+		*errstrp = "minval cannot be larger than the maxval";
 invalid:
 		errno = EINVAL;
-		*errstr_p = strerror(errno);
 		r = 0;
 		return r;
 	}
 	r = strtoll(numstr, &invalid, 10);
-	switch (*invalid) {
-		case '\0':
-			break;
-		case *numstr:
-		default:
-			/*
-			 * Hope this applies to cases where
-			 * invalid[] is equal to numstr.
-			 */
-			goto invalid;
+	if (*invalid != '\0' || numstr == invalid) {
+		*errstrp = "invalid number string";
+		goto invalid;
 	}
 	switch (errno) {
-		ERANGE:
-			char *errnostr = NULL;
-			errnostr = strerror(errno);
-			if (r == LLONG_MIN) 
-				sprintf(*errstr_p, "%s: %s is less than LLONG_MIN (%lld)",
-						errnostr, numstr, LLONG_MIN);
+		case ERANGE:
+			if (r == LLONG_MIN)
+				*errstrp = "number is smaller than LLONG_MIN";
 			else if (r == LLONG_MAX)
-				sprintf(*errstr_p, "%s: %s is more than LLONG_MAX (%lld)",
-						errnostr, numstr, LLONG_MAX);
+				*errstrp = "number is larger than LLONG_MAX";
 			r = 0;
+			break;
 		default:
-			if (r < minval && maxval < r) {
+			if (r < minval || maxval < r) {
 				errno = ERANGE;
-				char *errnostr = NULL;
-				errnostr = strerror(errno);
 				if (r < minval)
-					sprintf(*errstr_p,
-						"%s: %s is less than the minimal value of %lld",
-						errnostr, numstr, minval);
+					*errstrp = "number is smaller than the minimal value";
 				else if (maxval < r)
-					sprintf(*errstr_p,
-						"%s: %s is larger than the maximum value of %lld",
-						errnostr, numstr, maxval);
+					*errstrp = "number is larger than the maximum value";
 				r = 0;
 			}
+			break;
 	}
-
 	return r;
 }
 
