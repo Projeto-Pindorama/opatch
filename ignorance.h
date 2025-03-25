@@ -91,18 +91,21 @@ invalid:
 			}
 			break;
 	}
+
 	return r;
 }
 
 /* fgetln() implementation. */
-inline char *fgetln(FILE *restrict f, size_t *lenp) {
+static inline char *fgetln(FILE *restrict f, size_t *lenp) {
 	/* Fail if we can't get access to stdio. */
 	if (pledge("stdio", NULL) == -1)
 		return NULL;
 
 	char c = '\0',
-	     *buf = NULL;
+	     *buf = NULL,
+	     *nbuf = NULL;
 	size_t bufsiz = 0,
+	       nbufsiz = 0,
 	       len = 0;
 
 	if (buf == NULL) {
@@ -113,7 +116,22 @@ inline char *fgetln(FILE *restrict f, size_t *lenp) {
 
 	for (; (c = getc(f)); len++) {
 		if (c == EOF) return NULL;
-
+		if ((len + 1) > bufsiz) {
+			/* Increase the buffer size some more characters. */
+			nbufsiz = (bufsiz + 256);
+			nbuf = realloc(buf, nbufsiz);
+			if (nbuf == NULL) {
+				int realloc_errno = errno;
+				free(buf);
+				errno = realloc_errno;
+				buf = NULL;
+				len = -1; /* So it will be 0 later. */
+				break;
+			} else {
+				buf = nbuf;
+				bufsiz = nbufsiz;
+			}
+		}
 		buf[len] = c;
 		switch (c) {
 			case '\n':
