@@ -52,6 +52,7 @@ const char *getprogname(void);
 #include <stdio.h>
 #include <stdlib.h>
 
+/* Some functions from BSD's stdio.h/stdlib.h. */
 static inline long long strtonum(const char numstr[],
 		long long minval, long long maxval,
 		const char *errstrp[]) {
@@ -95,7 +96,6 @@ invalid:
 	return r;
 }
 
-/* fgetln() implementation. */
 static inline char *fgetln(FILE *restrict f, size_t *lenp) {
 	/* Fail if we can't get access to stdio. */
 	if (pledge("stdio", NULL) == -1)
