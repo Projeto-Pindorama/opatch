@@ -166,4 +166,9 @@ static inline char *fgetln(FILE *restrict f, size_t *lenp) {
 #define warnx(fmt, ...) vwarnx(fmt, ##__VA_ARGS__)
 
 #define warn(fmt, ...) vwarn(fmt, ##__VA_ARGS__)
+
+#define perror(mesg) \
+	if (*mesg != NULL) fprintf(stderr, "%s: ", mesg); \
+	fputs(strerror(errno), stderr); \
+	fputc('\n', stderr);
 #endif
