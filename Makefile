@@ -5,7 +5,7 @@ SRCS = backupfile.c ed.c inp.c mkpath.c patch.c pch.c util.c
 CFILES = $(filter %.c,$(SRCS))
 OBJS += $(CFILES:.c=.o)
 # Compatibility single-header library.
-COMPAT = -include ignorance.h
+COMPAT = -include baiacu.h
 
 all: $(PROG)
 ifdef SRCS

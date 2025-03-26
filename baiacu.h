@@ -1,27 +1,33 @@
 /*
- * ignorance.h - Boilerplate code for building OpenBSD code on other UNIX
+ * baiacu.h - Boilerplate code for building OpenBSD code on other UNIX
  */
 /*
  * Copyright (C) 2025: Luiz Antônio Rangel (takusuman)
  *
- * SPDX-License-Identifier: Unlicense
+ * SPDX-License-Identifier: BSD 2-Clause
  *
  * Partly based off "compat.h" header at Duncaen/lobase.
  */
 
 #ifndef __OpenBSD__
-#ifdef __GNUC__
-#define __dead	__attribute__((__noreturn__))
-#else
-#define __dead /* Não há nada, nada há. */
-#endif
-
 /* A false pledge(). */
 #ifndef HAVE_PLEDGE
 #define pledge(x, y) 0
 #else
 int pledge(const char *, const char *[]);
 #endif /* !HAVE_PLEDGE */
+#endif
+
+#if defined(__OpenBSD__) || defined(__NetBSD__) \
+	|| defined(__FreeBSD__)
+#include <sys/param.h>
+#endif
+
+#ifdef __GNUC__
+#define __dead	__attribute__((__noreturn__))
+#else
+#define __dead /* Não há nada, nada há. */
+#endif
 
 /* Functions to set the program name. */
 #ifndef HAVE_SETPROGNAME
@@ -46,13 +52,16 @@ const char *getprogname(void);
 #define D_NAMLEN(e) (e)->d_namlen
 #endif
 
-#include <errno.h>
-#include <limits.h>
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-
 /* Some functions from BSD's stdio.h/stdlib.h. */
+#if defined(__linux__) || (OpenBSD < 200411) \
+	|| (FreeBSD < 200605) || (NetBSD < 201807) \
+	|| !defined(__MidnightBSD__) \
+	|| !defined(__DragonFly__) /* __linux__, OpenBSD < 3.6
+				    * FreeBSD < 6.1, NetBSD < 8
+				    * !MidnightBSD, !DragonFly */
+#include <errno.h>
+#include <stdlib.h>
+#include <limits.h>
 static inline long long strtonum(const char numstr[],
 		long long minval, long long maxval,
 		const char *errstrp[]) {
@@ -95,7 +104,20 @@ invalid:
 
 	return r;
 }
+#else /* !__linux__ */
+#if (NetBSD > 201807)
+/* Re-include <stdlib.h> with
+ * _OPENBSD_SOURCE defined. */
+#define _OPENBSD_SOURCE
+#include <stdlib.h>
+#endif /* !NetBSD */
+long long strtonum(const char numstr[], long long minval,
+		long long maxval, const char *errstrp[]);
+#endif /* OpenBSD > 3.6, FreeBSD > 6.1, NetBSD > 8, MidnightBSD, DragonFly */
 
+#ifdef __linux__
+#include <stdio.h>
+#include <stdlib.h>
 static inline char *fgetln(FILE *restrict f, size_t *lenp) {
 	/* Fail if we can't get access to stdio. */
 	if (pledge("stdio", NULL) == -1)
@@ -183,4 +205,4 @@ static inline char *fgetln(FILE *restrict f, size_t *lenp) {
 #define errx(errv, fmt, ...) \
 	warnx(fmt, ##__VA_ARGS__); \
 	exit(errv)
-#endif
+#endif /* !__linux__ */
