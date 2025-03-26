@@ -145,6 +145,11 @@ static inline char *fgetln(FILE *restrict f, size_t *lenp) {
 }
 
 /* err.h functions. */
+#define perror(mesg) \
+	if (*mesg != NULL) fprintf(stderr, "%s: ", mesg); \
+	fputs(strerror(errno), stderr); \
+	fputc('\n', stderr);
+
 #define __vwarncx(fmt, sep, ...) \
 	fprintf(stderr, "%s: ", getprogname()); \
 	if (fmt) { \
@@ -167,8 +172,15 @@ static inline char *fgetln(FILE *restrict f, size_t *lenp) {
 
 #define warn(fmt, ...) vwarn(fmt, ##__VA_ARGS__)
 
-#define perror(mesg) \
-	if (*mesg != NULL) fprintf(stderr, "%s: ", mesg); \
-	fputs(strerror(errno), stderr); \
-	fputc('\n', stderr);
+#define err(errv, fmt, ...) \
+	warn(fmt, ##__VA_ARGS__); \
+	exit(errv)
+
+#define errc(errv, wcode, fmt, ...) \
+	warnc(wcode, fmt, ##__VA_ARGS__); \
+	exit(errv)
+
+#define errx(errv, fmt, ...) \
+	warnx(fmt, ##__VA_ARGS__); \
+	exit(errv)
 #endif
