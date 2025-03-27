@@ -21,7 +21,7 @@ int pledge(const char *, const char *[]);
 #if defined(__OpenBSD__) || defined(__NetBSD__) \
 	|| defined(__FreeBSD__)
 #include <sys/param.h>
-#endif
+#endif /* !OpenBSD, !NetBSD, !FreeBSD */
 
 #ifdef __GNUC__
 #define __dead	__attribute__((__noreturn__))
@@ -51,6 +51,23 @@ const char *getprogname(void);
 #else
 #define D_NAMLEN(e) (e)->d_namlen
 #endif
+
+#include <strings.h>
+#if defined(__linux__) || defined(__NetBSD__) \
+	|| (OpenBSD < 201405) || (FreeBSD < 201610)
+/*
+ * Emulate explicit_bzero() per making bzero() unoptimizable.
+ * Reference:
+ * https://www.daemonology.net/blog/2014-09-04-how-to-zero-a-buffer.html
+ * It's not 100% guaranteed to work in any C99 compiler, but that's
+ * what we've got today for implementing as simple as this.
+ */
+void *(const volatile *explicit_bzero) (void *, size_t);
+explicit_bzero = bzero;
+#else
+void __dead explicit_bzero(void *b, size_t len);
+#endif /* !__linux__, !NetBSD, OpenBSD < 5.5,
+	* FreeBSD < 11.0 */
 
 /* Some functions from BSD's stdio.h/stdlib.h. */
 #if defined(__linux__) || (OpenBSD < 200411) \
@@ -115,9 +132,9 @@ long long strtonum(const char numstr[], long long minval,
 		long long maxval, const char *errstrp[]);
 #endif /* OpenBSD > 3.6, FreeBSD > 6.1, NetBSD > 8, MidnightBSD, DragonFly */
 
+
 #ifdef __linux__
 #include <stdio.h>
-#include <stdlib.h>
 static inline char *fgetln(FILE *restrict f, size_t *lenp) {
 	/* Fail if we can't get access to stdio. */
 	if (pledge("stdio", NULL) == -1)
@@ -205,4 +222,15 @@ static inline char *fgetln(FILE *restrict f, size_t *lenp) {
 #define errx(errv, fmt, ...) \
 	warnx(fmt, ##__VA_ARGS__); \
 	exit(errv)
+#else
+#include <err.h>
+#include <stdio.h>
+char *fgetln(FILE *stream, size_t *len);
+void __dead perror(const char *string);
+void __dead warnc(int code, const char *fmt, ...);
+void __dead warnx(const char *fmt, ...);
+void __dead warn(const char *fmt, ...);
+void __dead err(int eval, const char *fmt, ...);
+void __dead errc(int eval, int code, const char *fmt, ...);
+void __dead errx(int eval, const char *fmt, ...);
 #endif /* !__linux__ */
