@@ -23,4 +23,4 @@ $(PROG):
 	@$(CC) -o $@ $^ $(LDPATHS) $(LDFLAGS)
 
 clean:
-	rm -f $(PROG) $(PROG).o
+	rm -f $(PROG) $(OBJS)
