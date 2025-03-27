@@ -6,7 +6,13 @@
  *
  * SPDX-License-Identifier: BSD 2-Clause
  *
- * Partly based off "compat.h" header at Duncaen/lobase.
+ * recallocarray() function and "MUL_NO_OVERFLOW" macro
+ * completely pulled from lobase's libopenbsd/stdlib.
+ * As per the copyright header of Duncaen/lobase's
+ * "lib/libopenbsd/stdlib/reallocarray.c":
+ * Copyright (c) 2008 Otto Moerbeek <otto@drijf.net>
+ *
+ * SPDX-Licence-Identifier: ISC
  */
 
 #ifndef __OpenBSD__
@@ -29,9 +35,15 @@ int pledge(const char *, const char *[]);
 #define __dead /* Não há nada, nada há. */
 #endif
 
+#include <errno.h>
+#include <stddef.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <string.h>
+#include <strings.h>
+
 /* Functions to set the program name. */
 #ifndef HAVE_SETPROGNAME
-#include <string.h>
 char *__progname = NULL;
 #define setprogname(x) (__progname = strdup(x))
 #define getprogname(x) __progname
@@ -52,9 +64,10 @@ const char *getprogname(void);
 #define D_NAMLEN(e) (e)->d_namlen
 #endif
 
-#include <strings.h>
-#if defined(__linux__) || defined(__NetBSD__) \
-	|| (OpenBSD < 201405) || (FreeBSD < 201610)
+#if defined(__linux__) && (!defined(__GLIBC__) \
+	|| (__GLIBC__ <= 2 && __GLIBC_MINOR__ < 25)) \
+	|| defined(__NetBSD__) || (OpenBSD < 201405) \
+	|| (FreeBSD < 201610)
 /*
  * Emulate explicit_bzero() per making bzero() unoptimizable.
  * Reference:
@@ -62,22 +75,87 @@ const char *getprogname(void);
  * It's not 100% guaranteed to work in any C99 compiler, but that's
  * what we've got today for implementing as simple as this.
  */
-void *(const volatile *explicit_bzero) (void *, size_t);
-explicit_bzero = bzero;
+static void (* volatile explicit_bzero)(void *, size_t) = bzero;
 #else
 void __dead explicit_bzero(void *b, size_t len);
-#endif /* !__linux__, !NetBSD, OpenBSD < 5.5,
-	* FreeBSD < 11.0 */
+#endif /* !__linux__, !NetBSD, GLIBC >= 2.25,
+	* OpenBSD > 5.5, FreeBSD > 11.0 */
 
 /* Some functions from BSD's stdio.h/stdlib.h. */
+
+#if defined(__linux__) || defined(__FreeBSD__) || defined(__NetBSD__) \
+	|| !defined(__DragonFly__) || (OpenBSD < 201704)
+#include <unistd.h>
+/*
+ * This is the same that sqrt(SIZE_MAX + 1), with s1 multiplied per s2
+ * being smaller or equal to SIZE_MAX. It is used to prevent overflow
+ * when multiplying these two numbers, the size of elements per the
+ * number of elements itself, since the maximum value to the new size
+ * of the array can be just (SIZE_MAX + 1).
+ */
+#define MUL_NO_OVERFLOW	((size_t)1 << (sizeof(size_t) * 4))
+static inline void *recallocarray(void *ptr,
+		size_t oldnmemb,
+		size_t nmemb,
+		size_t size) {
+	size_t oldsize = 0,
+		newsize = 0;
+	void *newptr = NULL;
+
+	if (ptr == NULL)
+		return calloc(nmemb, size);
+
+	if ((nmemb >= MUL_NO_OVERFLOW || size >= MUL_NO_OVERFLOW) &&
+	    nmemb > 0 && (SIZE_MAX / nmemb) < size) {
+		errno = ENOMEM;
+		return NULL;
+	}
+	newsize = (nmemb * size);
+
+	if ((oldnmemb >= MUL_NO_OVERFLOW || size >= MUL_NO_OVERFLOW) &&
+	    oldnmemb > 0 && (SIZE_MAX / oldnmemb) < size) {
+		errno = EINVAL;
+		return NULL;
+	}
+	oldsize = (oldnmemb * size);
+
+	/*
+	 * Don't bother too much if we're shrinking just a bit,
+	 * we do not shrink for series of small steps, oh well.
+	 */
+	if (newsize <= oldsize) {
+		size_t d = (oldsize - newsize);
+
+		if (d < (oldsize / 2) && d < getpagesize()) {
+			memset(((char *)ptr + newsize), 0, d);
+			return ptr;
+		}
+	}
+
+	newptr = malloc(newsize);
+	if (newptr == NULL)
+		return NULL;
+
+	if (newsize > oldsize) {
+		memcpy(newptr, ptr, oldsize);
+		memset((char *)newptr + oldsize, 0, newsize - oldsize);
+	} else
+		memcpy(newptr, ptr, newsize);
+
+	explicit_bzero(ptr, oldsize);
+	free(ptr);
+
+	return newptr;
+}
+#else
+void __dead *recallocarray(void *ptr, size_t oldnmemb,
+		size_t nmemb, size_t size);
+#endif /* OpenBSD >= 6.1, DragonFly */
+
 #if defined(__linux__) || (OpenBSD < 200411) \
 	|| (FreeBSD < 200605) || (NetBSD < 201807) \
 	|| !defined(__MidnightBSD__) \
-	|| !defined(__DragonFly__) /* __linux__, OpenBSD < 3.6
-				    * FreeBSD < 6.1, NetBSD < 8
-				    * !MidnightBSD, !DragonFly */
-#include <errno.h>
-#include <stdlib.h>
+	|| !defined(__DragonFly__) /* __linux__ */
 #include <limits.h>
 static inline long long strtonum(const char numstr[],
 		long long minval, long long maxval,
@@ -232,4 +310,4 @@ void __dead warn(const char *fmt, ...);
 void __dead err(int eval, const char *fmt, ...);
 void __dead errc(int eval, int code, const char *fmt, ...);
 void __dead errx(int eval, const char *fmt, ...);
-#endif /* !__linux__ */
+#endif /* !__linux__, *BSD */
