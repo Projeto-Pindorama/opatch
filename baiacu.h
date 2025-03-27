@@ -37,13 +37,11 @@ int pledge(const char *, const char *[]);
 
 #include <errno.h>
 #include <limits.h>
-#include <stdarg.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
 
 /* Functions to set the program name. */
 #ifndef HAVE_SETPROGNAME
@@ -71,7 +69,7 @@ const char *getprogname(void);
 	&& (__GLIBC__ >= 2 && __GLIBC_MINOR__ > 25)) \
 	|| !defined(__NetBSD__) || (OpenBSD > 201405) \
 	|| (FreeBSD > 201610)
-void __dead explicit_bzero(void *b, size_t len);
+#include <strings.h>
 #else
 /*
  * Emulate explicit_bzero() per making bzero() unoptimizable.
@@ -85,7 +83,6 @@ static void (* volatile explicit_bzero)(void *, size_t) = bzero;
 	* OpenBSD < 5.5, FreeBSD < 11.0 */
 
 /* Some functions from BSD's stdio.h/stdlib.h. */
-
 #if defined(__linux__) || defined(__FreeBSD__) || defined(__NetBSD__) \
 	|| !defined(__DragonFly__) || (OpenBSD < 201704)
 #include <unistd.h>
@@ -150,9 +147,6 @@ static inline void *recallocarray(void *ptr,
 
 	return newptr;
 }
-#else
-void __dead *recallocarray(void *ptr, size_t oldnmemb,
-		size_t nmemb, size_t size);
 #endif /* OpenBSD >= 6.1, DragonFly */
 
 #if defined(__linux__) || (OpenBSD < 200411) \
@@ -206,10 +200,8 @@ invalid:
 /* Re-include <stdlib.h> with
  * _OPENBSD_SOURCE defined. */
 #define _OPENBSD_SOURCE
-#include <stdlib.h>
 #endif /* !NetBSD */
-long long strtonum(const char numstr[], long long minval,
-		long long maxval, const char *errstrp[]);
+#include <stdlib.h>
 #endif /* OpenBSD > 3.6, FreeBSD > 6.1, NetBSD > 8, MidnightBSD, DragonFly */
 
 #ifdef __linux__
@@ -260,13 +252,11 @@ static inline char *fgetln(FILE *restrict f, size_t *lenp) {
 
 	return buf;
 }
+#endif /* !__linux__, *BSD */
 
+#ifdef __linux__
+#include <stdarg.h>
 /* err.h functions. */
-#define perror(mesg) \
-	if (*mesg != NULL) fprintf(stderr, "%s: ", mesg); \
-	fputs(strerror(errno), stderr); \
-	fputc('\n', stderr)
-
 #define __vwarncx(fmt, sep, ...) \
 	fprintf(stderr, "%s: ", getprogname()); \
 	if (fmt) { \
@@ -274,40 +264,58 @@ static inline char *fgetln(FILE *restrict f, size_t *lenp) {
 		fputs(sep, stderr); \
 	}
 
-#define vwarnx(fmt, ...) __vwarncx(fmt, "\n", ##__VA_ARGS__)
 
-#define vwarnc(wcode, fmt, ...) \
-	__vwarncx(fmt, ": ", ##__VA_ARGS__); \
+#define vwarnc(wcode, fmt, ap) __vwarncx(fmt, ": ", ap); \
 	fputs(strerror(wcode), stderr); \
 	fputc('\n', stderr)
 
-#define vwarn(fmt, ...) vwarnc(errno, fmt, ##__VA_ARGS__)
+static inline void __dead warnc(int wcode, char fmt[], ...) {
+		va_list ap;
+		va_start(ap, fmt);
+		vwarnc(wcode, fmt, ap);
+		va_end(ap);
+}
 
-#define warnc(wcode, fmt, ...) vwarnc(wcode, fmt, ##__VA_ARGS__)
-
-#define warnx(fmt, ...) vwarnx(fmt, ##__VA_ARGS__)
-
-#define warn(fmt, ...) vwarn(fmt, ##__VA_ARGS__)
-
-#define err(errv, fmt, ...) \
-	warn(fmt, ##__VA_ARGS__); \
-	exit(errv)
-
-#define errc(errv, wcode, fmt, ...) \
-	warnc(wcode, fmt, ##__VA_ARGS__); \
-	exit(errv)
-
-#define errx(errv, fmt, ...) \
-	warnx(fmt, ##__VA_ARGS__); \
-	exit(errv)
-#else
+static inline void errc(int ecode, int wcode, char fmt[], ...) {
+		va_list ap;
+		va_start(ap, fmt);
+		vwarnc(wcode, fmt, ap);
+		va_end(ap);
+		exit(ecode);
+}
+#endif
+#if !defined(__linux__) || defined(__GLIBC__)
 #include <err.h>
-char *fgetln(FILE *stream, size_t *len);
-void __dead perror(const char *string);
-void __dead warnc(int code, const char *fmt, ...);
-void __dead warnx(const char *fmt, ...);
-void __dead warn(const char *fmt, ...);
-void __dead err(int eval, const char *fmt, ...);
-void __dead errc(int eval, int code, const char *fmt, ...);
-void __dead errx(int eval, const char *fmt, ...);
-#endif /* !__linux__, *BSD */
+#else
+#define vwarnx(fmt, ap) __vwarncx(fmt, "\n", ap)
+#define vwarn(fmt, ap) vwarnc(errno, fmt, ap)
+static inline void __dead warnx(char fmt[], ...) {
+		va_list ap;
+		va_start(ap, fmt);
+		vwarnx(fmt, ap);
+		va_end(ap);
+}
+
+static inline void __dead warn(char fmt[], ...) {
+		va_list ap;
+		va_start(ap, fmt);
+		vwarn(fmt, ap);
+		va_end(ap);
+}
+
+static inline void errx(int ecode, char fmt[], ...) {
+		va_list ap;
+		va_start(ap, fmt);
+		vwarnx(fmt, ap);
+		va_end(ap);
+		exit(ecode);
+}
+
+static inline void err(int ecode, char fmt[], ...) {
+		va_list ap;
+		va_start(ap, fmt);
+		vwarn(fmt, ap);
+		va_end(ap);
+		exit(ecode);
+}
+#endif /* __linux__, !__GLIBC__, !*BSD */
