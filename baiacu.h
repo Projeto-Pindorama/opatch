@@ -36,15 +36,18 @@ int pledge(const char *, const char *[]);
 #endif
 
 #include <errno.h>
+#include <limits.h>
+#include <stdarg.h>
 #include <stddef.h>
-#include <stdlib.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 
 /* Functions to set the program name. */
 #ifndef HAVE_SETPROGNAME
-char *__progname = NULL;
+extern char *__progname;
 #define setprogname(x) (__progname = strdup(x))
 #define getprogname(x) __progname
 #else
@@ -64,10 +67,12 @@ const char *getprogname(void);
 #define D_NAMLEN(e) (e)->d_namlen
 #endif
 
-#if defined(__linux__) && (!defined(__GLIBC__) \
-	|| (__GLIBC__ <= 2 && __GLIBC_MINOR__ < 25)) \
-	|| defined(__NetBSD__) || (OpenBSD < 201405) \
-	|| (FreeBSD < 201610)
+#if !defined(linux) || (defined(__GLIBC__) \
+	&& (__GLIBC__ >= 2 && __GLIBC_MINOR__ > 25)) \
+	|| !defined(__NetBSD__) || (OpenBSD > 201405) \
+	|| (FreeBSD > 201610)
+void __dead explicit_bzero(void *b, size_t len);
+#else
 /*
  * Emulate explicit_bzero() per making bzero() unoptimizable.
  * Reference:
@@ -76,10 +81,8 @@ const char *getprogname(void);
  * what we've got today for implementing as simple as this.
  */
 static void (* volatile explicit_bzero)(void *, size_t) = bzero;
-#else
-void __dead explicit_bzero(void *b, size_t len);
-#endif /* !__linux__, !NetBSD, GLIBC >= 2.25,
-	* OpenBSD > 5.5, FreeBSD > 11.0 */
+#endif /* __linux__, NetBSD, GLIBC < 2.25,
+	* OpenBSD < 5.5, FreeBSD < 11.0 */
 
 /* Some functions from BSD's stdio.h/stdlib.h. */
 
@@ -156,7 +159,6 @@ void __dead *recallocarray(void *ptr, size_t oldnmemb,
 	|| (FreeBSD < 200605) || (NetBSD < 201807) \
 	|| !defined(__MidnightBSD__) \
 	|| !defined(__DragonFly__) /* __linux__ */
-#include <limits.h>
 static inline long long strtonum(const char numstr[],
 		long long minval, long long maxval,
 		const char *errstrp[]) {
@@ -211,7 +213,6 @@ long long strtonum(const char numstr[], long long minval,
 #endif /* OpenBSD > 3.6, FreeBSD > 6.1, NetBSD > 8, MidnightBSD, DragonFly */
 
 #ifdef __linux__
-#include <stdio.h>
 static inline char *fgetln(FILE *restrict f, size_t *lenp) {
 	/* Fail if we can't get access to stdio. */
 	if (pledge("stdio", NULL) == -1)
@@ -264,7 +265,7 @@ static inline char *fgetln(FILE *restrict f, size_t *lenp) {
 #define perror(mesg) \
 	if (*mesg != NULL) fprintf(stderr, "%s: ", mesg); \
 	fputs(strerror(errno), stderr); \
-	fputc('\n', stderr);
+	fputc('\n', stderr)
 
 #define __vwarncx(fmt, sep, ...) \
 	fprintf(stderr, "%s: ", getprogname()); \
@@ -301,7 +302,6 @@ static inline char *fgetln(FILE *restrict f, size_t *lenp) {
 	exit(errv)
 #else
 #include <err.h>
-#include <stdio.h>
 char *fgetln(FILE *stream, size_t *len);
 void __dead perror(const char *string);
 void __dead warnc(int code, const char *fmt, ...);
