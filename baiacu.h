@@ -132,7 +132,6 @@ long long strtonum(const char numstr[], long long minval,
 		long long maxval, const char *errstrp[]);
 #endif /* OpenBSD > 3.6, FreeBSD > 6.1, NetBSD > 8, MidnightBSD, DragonFly */
 
-
 #ifdef __linux__
 #include <stdio.h>
 static inline char *fgetln(FILE *restrict f, size_t *lenp) {
