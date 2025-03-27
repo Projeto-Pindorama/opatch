@@ -268,7 +268,7 @@ static inline char *fgetln(FILE *restrict f, size_t *lenp) {
 	fputs(strerror(wcode), stderr); \
 	fputc('\n', stderr)
 
-static inline void __dead warnc(int wcode, char fmt[], ...) {
+static inline void warnc(int wcode, char fmt[], ...) {
 		va_list ap;
 		va_start(ap, fmt);
 		vwarnc(wcode, fmt, ap);
