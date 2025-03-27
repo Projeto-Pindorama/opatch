@@ -254,7 +254,7 @@ static inline char *fgetln(FILE *restrict f, size_t *lenp) {
 }
 #endif /* !__linux__, *BSD */
 
-#ifdef __linux__
+#if defined(__linux__) || defined(__GLIBC__)
 #include <stdarg.h>
 /* err.h functions. */
 #define __vwarncx(fmt, sep, ...) \
@@ -263,7 +263,6 @@ static inline char *fgetln(FILE *restrict f, size_t *lenp) {
 		fprintf(stderr, fmt, ##__VA_ARGS__); \
 		fputs(sep, stderr); \
 	}
-
 
 #define vwarnc(wcode, fmt, ap) __vwarncx(fmt, ": ", ap); \
 	fputs(strerror(wcode), stderr); \
