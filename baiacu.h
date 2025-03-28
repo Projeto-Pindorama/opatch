@@ -16,7 +16,7 @@
  */
 
 #ifndef __OpenBSD__
-/* A false pledge(). */
+/* A false pledge() --- and now unveil(). */
 #ifndef HAVE_PLEDGE
 #define pledge(x, y) 0
 #endif /* !HAVE_PLEDGE */

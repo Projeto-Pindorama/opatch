@@ -69,6 +69,11 @@ bool		trejkeep = false;
 bool		warn_on_invalid_line;
 bool		last_line_missing_eol;
 
+/* The GNU C library doesn't define optreset. */
+#ifdef __GLIBC__
+int	optreset = 0;
+#endif
+
 #ifdef DEBUGGING
 int		debug = 0;
 #endif
@@ -550,6 +555,9 @@ get_some_switches(void)
 	if (!Argc)
 		return;
 	optreset = optind = 1;
+#ifdef __GLIBC__
+	optind = !optreset; /* GNU getopt() shall now be resetted. */
+#endif
 	while ((ch = getopt_long(Argc, Argv, options, longopts, NULL)) != -1) {
 		switch (ch) {
 		case 'b':
