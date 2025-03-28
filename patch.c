@@ -1,4 +1,4 @@
-/*	$OpenBSD: patch.c,v 1.64 2017/06/12 14:23:26 deraadt Exp $	*/
+/*	$OpenBSD: patch.c,v 1.77 2024/08/30 07:11:02 op Exp $	*/
 
 /*
  * patch - a program to apply diffs to original files
@@ -26,14 +26,15 @@
  * behaviour
  */
 
-
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
 #include <ctype.h>
 #include <getopt.h>
+#include <libgen.h>
 #include <limits.h>
+#include <paths.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -43,12 +44,12 @@
 #include "pch.h"
 #include "inp.h"
 #include "backupfile.h"
-#include "pathnames.h"
 #include "ed.h"
 
 mode_t		filemode = 0644;
 
-char		buf[MAXLINELEN];	/* general purpose buffer */
+char		*buf;			/* general purpose buffer */
+size_t		 bufsz;			/* general purpose buffer size */
 
 bool		using_plan_a = true;	/* try to keep everything in memory */
 bool		out_of_mem = false;	/* ran out of memory in plan a */
@@ -67,6 +68,11 @@ bool		toutkeep = false;
 bool		trejkeep = false;
 bool		warn_on_invalid_line;
 bool		last_line_missing_eol;
+
+/* The GNU C library doesn't define optreset. */
+#ifdef __GLIBC__
+int	optreset = 0;
+#endif
 
 #ifdef DEBUGGING
 int		debug = 0;
@@ -99,7 +105,7 @@ static void	copy_till(LINENUM, bool);
 static void	spew_output(void);
 static void	dump_line(LINENUM, bool);
 static bool	patch_match(LINENUM, LINENUM, LINENUM);
-static bool	similar(const char *, const char *, int);
+static bool	similar(const char *, const char *, ssize_t);
 static __dead void usage(void);
 
 /* true if -E was specified on command line.  */
@@ -107,6 +113,8 @@ static bool	remove_empty_files = false;
 
 /* true if -R was specified on command line.  */
 static bool	reverse_flag_specified = false;
+
+static bool	Vflag = false;
 
 /* buffer holding the name of the rejected patch file. */
 static char	rejname[PATH_MAX];
@@ -149,10 +157,15 @@ main(int argc, char *argv[])
 	const	char *tmpdir;
 	char	*v;
 
-	if (pledge("stdio rpath wpath cpath tmppath fattr", NULL) == -1) {
+	if (pledge("stdio rpath wpath cpath tmppath fattr unveil", NULL) == -1) {
 		perror("pledge");
 		my_exit(2);
 	}
+
+	bufsz = INITLINELEN;
+	if ((buf = malloc(bufsz)) == NULL)
+		pfatal("allocating input buffer");
+	buf[0] = '\0';
 
 	setvbuf(stdout, NULL, _IOLBF, 0);
 	setvbuf(stderr, NULL, _IOLBF, 0);
@@ -167,25 +180,25 @@ main(int argc, char *argv[])
 	i++;
 	if (asprintf(&TMPOUTNAME, "%.*s/patchoXXXXXXXXXX", i, tmpdir) == -1)
 		fatal("cannot allocate memory");
-	if ((fd = mkstemp(TMPOUTNAME)) < 0)
+	if ((fd = mkstemp(TMPOUTNAME)) == -1)
 		pfatal("can't create %s", TMPOUTNAME);
 	close(fd);
 
 	if (asprintf(&TMPINNAME, "%.*s/patchiXXXXXXXXXX", i, tmpdir) == -1)
 		fatal("cannot allocate memory");
-	if ((fd = mkstemp(TMPINNAME)) < 0)
+	if ((fd = mkstemp(TMPINNAME)) == -1)
 		pfatal("can't create %s", TMPINNAME);
 	close(fd);
 
 	if (asprintf(&TMPREJNAME, "%.*s/patchrXXXXXXXXXX", i, tmpdir) == -1)
 		fatal("cannot allocate memory");
-	if ((fd = mkstemp(TMPREJNAME)) < 0)
+	if ((fd = mkstemp(TMPREJNAME)) == -1)
 		pfatal("can't create %s", TMPREJNAME);
 	close(fd);
 
 	if (asprintf(&TMPPATNAME, "%.*s/patchpXXXXXXXXXX", i, tmpdir) == -1)
 		fatal("cannot allocate memory");
-	if ((fd = mkstemp(TMPPATNAME)) < 0)
+	if ((fd = mkstemp(TMPPATNAME)) == -1)
 		pfatal("can't create %s", TMPPATNAME);
 	close(fd);
 
@@ -199,8 +212,57 @@ main(int argc, char *argv[])
 	Argc = argc;
 	Argv = argv;
 	get_some_switches();
+	if (unveil(tmpdir, "rwc") == -1) {
+		perror("unveil");
+		my_exit(2);
+	}
+	if (outname != NULL)
+		if (unveil(outname, "rwc") == -1) {
+			perror("unveil");
+			my_exit(2);
+		}
+	if (filearg[0] != NULL) {
+		char *origdir;
 
-	if (backup_type == none) {
+		if (unveil(filearg[0], "rwc") == -1) {
+			perror("unveil");
+			my_exit(2);
+		}
+		if ((origdir = dirname(filearg[0])) == NULL) {
+			perror("dirname");
+			my_exit(2);
+		}
+		if (unveil(origdir, "rwc") == -1) {
+			perror("unveil");
+			my_exit(2);
+		}
+	} else {
+		if (unveil(".", "rwc") == -1) {
+			perror("unveil");
+			my_exit(2);
+		}
+	}
+	if (filearg[1] != NULL)
+		if (unveil(filearg[1], "r") == -1) {
+			perror("unveil");
+			my_exit(2);
+		}
+	if (!force && !batch)
+		if (unveil(_PATH_TTY, "r") == -1) {
+			perror("unveil");
+			my_exit(2);
+		}
+	if (*rejname != '\0')
+		if (unveil(rejname, "rwc") == -1) {
+			perror("unveil");
+			my_exit(2);
+		}
+	if (pledge("stdio rpath wpath cpath tmppath fattr", NULL) == -1) {
+		perror("pledge");
+		my_exit(2);
+	}
+
+	if (!Vflag) {
 		if ((v = getenv("PATCH_VERSION_CONTROL")) == NULL)
 			v = getenv("VERSION_CONTROL");
 		if (v != NULL || !posix)
@@ -255,7 +317,8 @@ main(int argc, char *argv[])
 			if (!skip_rest_of_patch) {
 				do {
 					where = locate_hunk(fuzz);
-					if (hunk == 1 && where == 0 && !force) {
+					if ((hunk == 1 && where == 0 && !force) ||
+					    (where == 1 && pch_ptrn_lines() == 0 && !force)) {
 						/* dwim for reversed patch? */
 						if (!pch_swap()) {
 							if (fuzz == 0)
@@ -271,6 +334,10 @@ main(int argc, char *argv[])
 								/* put it back to normal */
 								fatal("lost hunk on alloc error!\n");
 							reverse = !reverse;
+
+							/* restore position if this patch creates a file */
+							if (pch_ptrn_lines() == 0)
+								where = 1;
 						} else if (noreverse) {
 							if (!pch_swap())
 								/* put it back to normal */
@@ -455,6 +522,7 @@ get_some_switches(void)
 		{"context",		no_argument,		0,	'c'},
 		{"debug",		required_argument,	0,	'x'},
 		{"directory",		required_argument,	0,	'd'},
+		{"dry-run",		no_argument,		0,	'C'},
 		{"ed",			no_argument,		0,	'e'},
 		{"force",		no_argument,		0,	'f'},
 		{"forward",		no_argument,		0,	'N'},
@@ -479,16 +547,16 @@ get_some_switches(void)
 		{NULL,			0,			0,	0}
 	};
 	int ch;
+	const char *errstr;
 
 	rejname[0] = '\0';
 	Argc_last = Argc;
 	Argv_last = Argv;
 	if (!Argc)
 		return;
-#ifdef __GLIBC__
-	optind = 0;
-#else
 	optreset = optind = 1;
+#ifdef __GLIBC__
+	optind = !optreset; /* GNU getopt() shall now be resetted. */
 #endif
 	while ((ch = getopt_long(Argc, Argv, options, longopts, NULL)) != -1) {
 		switch (ch) {
@@ -515,7 +583,7 @@ get_some_switches(void)
 			check_only = true;
 			break;
 		case 'd':
-			if (chdir(optarg) < 0)
+			if (chdir(optarg) == -1)
 				pfatal("can't cd to %s", optarg);
 			break;
 		case 'D':
@@ -539,7 +607,10 @@ get_some_switches(void)
 			force = true;
 			break;
 		case 'F':
-			maxfuzz = atoi(optarg);
+			maxfuzz = strtonum(optarg, 0, INT_MAX, &errstr);
+			if (errstr != NULL)
+				fatal("maximum fuzz is %s: %s\n",
+				    errstr, optarg);
 			break;
 		case 'i':
 			if (++filec == MAXFILEC)
@@ -559,7 +630,10 @@ get_some_switches(void)
 			outname = xstrdup(optarg);
 			break;
 		case 'p':
-			strippath = atoi(optarg);
+			strippath = strtonum(optarg, 0, INT_MAX, &errstr);
+			if (errstr != NULL)
+				fatal("strip count is %s: %s\n",
+				    errstr, optarg);
 			break;
 		case 'r':
 			if (strlcpy(rejname, optarg,
@@ -584,10 +658,14 @@ get_some_switches(void)
 			break;
 		case 'V':
 			backup_type = get_version(optarg);
+			Vflag = true;
 			break;
 #ifdef DEBUGGING
 		case 'x':
-			debug = atoi(optarg);
+			debug = strtonum(optarg, 0, INT_MAX, &errstr);
+			if (errstr != NULL)
+				fatal("debug number is %s: %s\n",
+				    errstr, optarg);
 			break;
 #endif
 		default:
@@ -620,8 +698,8 @@ usage(void)
 	fprintf(stderr,
 "usage: patch [-bCcEeflNnRstuv] [-B backup-prefix] [-D symbol] [-d directory]\n"
 "             [-F max-fuzz] [-i patchfile] [-o out-file] [-p strip-count]\n"
-"             [-r rej-name] [-V t | nil | never] [-x number] [-z backup-ext]\n"
-"             [--posix] [origfile [patchfile]]\n"
+"             [-r rej-name] [-V t | nil | never | none] [-x number]\n"
+"             [-z backup-ext] [--posix] [origfile [patchfile]]\n"
 "       patch <patchfile\n");
 	my_exit(2);
 }
@@ -644,6 +722,8 @@ locate_hunk(LINENUM fuzz)
 		    || diff_type == UNI_DIFF)) {
 			say("Empty context always matches.\n");
 		}
+		if (first_guess == 0)
+			return 1;
 		return (first_guess);
 	}
 	if (max_neg_offset >= first_guess)	/* do not try lines < 0 */
@@ -1003,7 +1083,7 @@ patch_match(LINENUM base, LINENUM offset, LINENUM fuzz)
 	LINENUM		pat_lines = pch_ptrn_lines() - fuzz;
 	const char	*ilineptr;
 	const char	*plineptr;
-	short		plinelen;
+	ssize_t		plinelen;
 
 	for (iline = base + offset + fuzz; pline <= pat_lines; pline++, iline++) {
 		ilineptr = ifetch(iline, offset >= 0);
@@ -1039,7 +1119,7 @@ patch_match(LINENUM base, LINENUM offset, LINENUM fuzz)
  * Do two lines match with canonicalized white space?
  */
 static bool
-similar(const char *a, const char *b, int len)
+similar(const char *a, const char *b, ssize_t len)
 {
 	while (len) {
 		if (isspace((unsigned char)*b)) { /* whitespace (or \n) to match? */

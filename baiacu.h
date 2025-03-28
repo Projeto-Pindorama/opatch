@@ -16,12 +16,13 @@
  */
 
 #ifndef __OpenBSD__
-/* A false pledge(). */
+/* A false pledge() --- and now unveil(). */
 #ifndef HAVE_PLEDGE
 #define pledge(x, y) 0
-#else
-int pledge(const char *, const char *[]);
 #endif /* !HAVE_PLEDGE */
+#ifndef HAVE_UNVEIL
+#define unveil(x, y) 0
+#endif /* !HAVE_UNVEIL */
 #endif
 
 #if defined(__OpenBSD__) || defined(__NetBSD__) \
