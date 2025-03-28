@@ -1,6 +1,26 @@
-#	$OpenBSD: Makefile,v 1.5 2015/10/16 07:33:47 tobias Exp $
+# Based from both usr.bin/patch/Makefile and mk/bsd.prog.mk.
 
-PROG=	patch
-SRCS=	patch.c pch.c inp.c util.c backupfile.c mkpath.c ed.c
+PROG =	patch
+SRCS = backupfile.c ed.c inp.c mkpath.c patch.c pch.c util.c
+CFILES = $(filter %.c,$(SRCS))
+OBJS += $(CFILES:.c=.o)
+# Compatibility single-header library.
+COMPAT = -include baiacu.h
 
-.include <bsd.prog.mk>
+all: $(PROG)
+ifdef SRCS
+$(PROG) : $(OBJS)
+else
+$(PROG) : % : %.o
+endif
+
+%.o: %.c
+	@echo $(CC) $(COMPAT) -c $(CFLAGS) $(<F)
+	@$(CC) $(COMPAT) -c $(CFLAGS) $(CPPFLAGS) $<
+
+$(PROG):
+	@echo $(CC) -o $(@F) $(^F) $(LDADD)
+	@$(CC) -o $@ $^ $(LDPATHS) $(LDFLAGS)
+
+clean:
+	rm -f $(PROG) $(OBJS)
