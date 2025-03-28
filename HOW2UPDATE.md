@@ -25,12 +25,12 @@ Switched to branch 'new'
 ```
 
 Get latest source from OpenBSD.org — see OpenBSD's ["Mirrors"
-page](https://www.openbsd.org/ftp.html) and replace "``$version``"
-with the value of the newest release:
+page](https://www.openbsd.org/ftp.html) and replace "``X.Y``"
+with the value of the newest release, which is, currently, 7.6:
 
 ```console
 S145% cd /tmp
-S145% curl -O#L https://cdn.openbsd.org/pub/OpenBSD/$version/src.tar.gz
+S145% curl -O#L https://cdn.openbsd.org/pub/OpenBSD/X.Y/src.tar.gz
 S145% gunzip -cd src.tar.gz | tar -xvf - usr.bin/patch
 x usr.bin/patch/CVS directory
 x usr.bin/patch/CVS/Root 5 bytes, 1 tape blocks
@@ -64,7 +64,7 @@ S145% cd -
 S145% cp /tmp/usr.bin/patch/* .                                                                                                                    
 cp: </tmp/usr.bin/patch/CVS> directory
 S145% git add .
-S145% git commit -m "feat: Import code from OpenBSD $version src.tar.gz"
+S145% git commit -m "feat: Import code from OpenBSD X.Y src.tar.gz"
 ```
 
 Now, merge opatch's code to the new one. Some conflicts may appear in the
@@ -86,8 +86,8 @@ After that, try to compile the patch program and run some tests:
 S145% gmake
 ```
 
-In case of something breaking, report it as an
-[issue](https://github.com/Projeto-Pindorama/opatch/issues/new) or, if
+In case of something garbling, report it as an
+[issue](https://github.com/Projeto-Pindorama/opatch/issues/new) — or, if
 you're willing to chip in the maintenance, report it __and__ try to find a
 solution.  
 In this example, using OpenBSD 7.6 source code, we can see that they abandoned
@@ -103,6 +103,7 @@ backupfile.c:109:25: error: ‘struct dirent’ has no member named ‘d_namlen�
       |                         d_name
 gmake: *** [Makefile:19: backupfile.o] Error 1
 ```
+
 This can (and should) be altered just per replacing ``dp->d_namlen`` back with
 the macro. ``sed``(1) must do the job:
 
@@ -153,8 +154,9 @@ gmake: *** [Makefile:19: patch.o] Error 1
 The modifications must be made to the compatibility header, ``baiacu.h``. Good
 references at times like these are the [Gnulib
 manual](https://www.gnu.org/software/gnulib/manual/gnulib.html) and, of course,
-[OpenBSD manual pages for library
-functions](https://man.openbsd.org/?query=&sec=3).  
+OpenBSD manual pages for [library
+functions](https://man.openbsd.org/?query=&sec=3) and
+[syscalls](https://man.openbsd.org/?query=&sec=2).  
 After all of this is done, commit every change:
 
 ```console
@@ -232,7 +234,55 @@ S145% git branch -d new
 Deleted branch new (was 301dee3).
 ```
 
-And, in case of merging locally, push the local main branch to remote origin.
+And, in case of merging locally, push the local main branch to remote origin:
 
-In case of merging remotely via GitHub, update main:
+```console
+S145% git push -uv origin main
+Pushing to github.com:Projeto-Pindorama/opatch.git
+Enter passphrase for key '/usr/home/luiz/id_xxxxxx': 
+Enumerating objects: 31, done.
+Counting objects: 100% (27/27), done.
+Delta compression using up to 8 threads
+Compressing objects: 100% (17/17), done.
+Writing objects: 100% (17/17), 2.29 KiB | 1.15 MiB/s, done.
+Total 17 (delta 11), reused 0 (delta 0), pack-reused 0 (from 0)
+remote: Resolving deltas: 100% (11/11), completed with 5 local objects.
+To github.com:Projeto-Pindorama/opatch.git
+   d0088c2..cd1e74c  main -> main
+branch 'main' set up to track 'origin/main'.
+updating local tracking ref 'refs/remotes/origin/main'
+```
 
+***Alternatively***, in case of having merged it remotely via GitHub,
+you __will need__ to update the main branch. Otherwise, you may have big
+problems when trying to mess with the source code tree in the future:
+
+```console
+S145% git pull
+Enter passphrase for key '/usr/home/luiz/id_xxxxxx': 
+remote: Enumerating objects: 68, done.
+remote: Counting objects: 100% (46/46), done.
+remote: Compressing objects: 100% (10/10), done.
+remote: Total 30 (delta 22), reused 28 (delta 20), pack-reused 0 (from 0)
+Unpacking objects: 100% (30/30), 5.77 KiB | 18.00 KiB/s, done.
+From github.com:Projeto-Pindorama/opatch
+   d0088c2..cd1e74c  main       -> origin/main
+Updating d0088c2..cd1e74c
+Fast-forward
+ backupfile.c |  24 +++++++++++++++++-------
+ baiacu.h     |   7 ++++---
+ common.h     |   7 ++++---
+ ed.c         |   6 +++---
+ inp.c        |  13 +++++--------
+ patch.1      |  31 ++++++++++++++-----------------
+ patch.c      | 126 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-----------------------
+ pathnames.h  |  11 -----------
+ pch.c        | 101 ++++++++++++++++++++++++++++++++++++++++++++++++++++++-----------------------------------------------
+ pch.h        |  19 +++++++++----------
+ util.c       |  52 +++++++++++++++++++++++++++++++++-------------------
+ util.h       |   3 ++-
+ 12 files changed, 248 insertions(+), 152 deletions(-)
+ delete mode 100644 pathnames.h
+```
+
+Well, I think that's it.
