@@ -15,7 +15,12 @@
  * SPDX-Licence-Identifier: ISC
  */
 
+/* For operating system identification macro. */
+#include <stdio.h>
+
 #ifndef __OpenBSD__
+/* Because of the recallocarray() static impl. */
+#define OpenBSD 0
 /* A false pledge() --- and now unveil(). */
 #ifndef HAVE_PLEDGE
 #define pledge(x, y) 0
@@ -40,7 +45,6 @@
 #include <limits.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -84,8 +88,9 @@ static void (* volatile explicit_bzero)(void *, size_t) = bzero;
 	* OpenBSD < 5.5, FreeBSD < 11.0 */
 
 /* Some functions from BSD's stdio.h/stdlib.h. */
-#if defined(__linux__) || defined(__FreeBSD__) || defined(__NetBSD__) \
-	|| !defined(__DragonFly__) || (OpenBSD < 201704)
+#if defined(linux) || defined(__FreeBSD__) || defined(__NetBSD__) \
+	|| !defined(__DragonFly__) || defined(__OpenBSD__)
+#if OpenBSD < 201704
 #include <unistd.h>
 /*
  * This is the same that sqrt(SIZE_MAX + 1), with s1 multiplied per s2
@@ -148,12 +153,20 @@ static inline void *recallocarray(void *ptr,
 
 	return newptr;
 }
+#endif
 #endif /* OpenBSD >= 6.1, DragonFly */
 
-#if defined(__linux__) || (OpenBSD < 200411) \
-	|| (FreeBSD < 200605) || (NetBSD < 201807) \
-	|| !defined(__MidnightBSD__) \
-	|| !defined(__DragonFly__) /* __linux__ */
+#if !defined(__linux__) || (OpenBSD > 200411) \
+	|| (FreeBSD > 200605) || (NetBSD > 201807) \
+	|| defined(__MidnightBSD__) \
+	|| defined(__DragonFly__) /* !__linux__ */
+#if (NetBSD > 201807)
+/* Re-include <stdlib.h> with
+ * _OPENBSD_SOURCE defined. */
+#define _OPENBSD_SOURCE
+#endif /* !NetBSD */
+#include <stdlib.h>
+#else /* __linux__ */
 static inline long long strtonum(const char numstr[],
 		long long minval, long long maxval,
 		const char *errstrp[]) {
@@ -196,14 +209,7 @@ invalid:
 
 	return r;
 }
-#else /* !__linux__ */
-#if (NetBSD > 201807)
-/* Re-include <stdlib.h> with
- * _OPENBSD_SOURCE defined. */
-#define _OPENBSD_SOURCE
-#endif /* !NetBSD */
-#include <stdlib.h>
-#endif /* OpenBSD > 3.6, FreeBSD > 6.1, NetBSD > 8, MidnightBSD, DragonFly */
+#endif /* OpenBSD < 3.6, FreeBSD < 6.1, NetBSD < 8, !MidnightBSD, !DragonFly */
 
 #ifdef __linux__
 static inline char *fgetln(FILE *restrict f, size_t *lenp) {
