@@ -230,8 +230,7 @@ static inline char *fgetln(FILE *restrict f, size_t *lenp) {
 			return NULL; /* Can't allocate. */
 	}
 
-	for (; (c = getc(f)); len++) {
-		if (c == EOF) return NULL;
+	for (; (c = getc(f)) != EOF; len++) {
 		if ((len + 1) > bufsiz) {
 			/* Increase the buffer size some more characters. */
 			nbufsiz = (bufsiz + 256);
@@ -246,13 +245,8 @@ static inline char *fgetln(FILE *restrict f, size_t *lenp) {
 			}
 		}
 		buf[len] = c;
-		switch (c) {
-			case '\n':
-				break;
-			default:
-				continue;
-		}
-		break;
+		if (c == '\n')
+			break;
 	}
 	*lenp = len;
 	*lenp += 1;
