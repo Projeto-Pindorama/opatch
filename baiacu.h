@@ -2,7 +2,7 @@
  * baiacu.h - Boilerplate code for building OpenBSD code on other UNIX
  */
 /*
- * Copyright (C) 2025: Luiz Antônio Rangel (takusuman)
+ * Copyright (C) 2026: Luiz Antônio Rangel (takusuman)
  *
  * SPDX-License-Identifier: BSD 2-Clause
  *
