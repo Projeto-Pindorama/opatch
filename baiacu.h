@@ -211,7 +211,7 @@ invalid:
 }
 #endif /* OpenBSD < 3.6, FreeBSD < 6.1, NetBSD < 8, !MidnightBSD, !DragonFly */
 
-#ifdef __linux__
+#ifdef __GLIBC__
 static inline char *fgetln(FILE *restrict f, size_t *lenp) {
 	/* Fail if we can't get access to stdio. */
 	if (pledge("stdio", NULL) == -1)
@@ -253,11 +253,11 @@ static inline char *fgetln(FILE *restrict f, size_t *lenp) {
 
 	return buf;
 }
-#endif /* !__linux__, *BSD */
+#endif /* !__GLIBC__, *BSD */
 
-#if defined(__linux__) || defined(__GLIBC__)
+#ifdef __GLIBC__
 #include <stdarg.h>
-/* err.h functions. */
+/* (Non-standard) err.h functions. */
 #define __vwarncx(fmt, sep, ...) \
 	fprintf(stderr, "%s: ", getprogname()); \
 	if (fmt) { \
@@ -284,7 +284,7 @@ static inline void errc(int ecode, int wcode, char fmt[], ...) {
 		exit(ecode);
 }
 #endif
-#if !defined(__linux__) || defined(__GLIBC__)
+#if defined(__linux__) || defined(BSD)
 #include <err.h>
 #else
 #define vwarnx(fmt, ap) __vwarncx(fmt, "\n", ap)
