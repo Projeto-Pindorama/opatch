@@ -255,7 +255,7 @@ static inline char *fgetln(FILE *restrict f, size_t *lenp) {
 }
 #endif /* !__GLIBC__, *BSD */
 
-#ifdef __GLIBC__
+#ifndef BSD
 #include <stdarg.h>
 /* (Non-standard) err.h functions. */
 #define __vwarncx(fmt, sep, ...) \
@@ -283,7 +283,7 @@ static inline void errc(int ecode, int wcode, char fmt[], ...) {
 		va_end(ap);
 		exit(ecode);
 }
-#endif
+#endif /* !*BSD */
 #if defined(__linux__) || defined(BSD)
 #include <err.h>
 #else
@@ -318,4 +318,4 @@ static inline void err(int ecode, char fmt[], ...) {
 		va_end(ap);
 		exit(ecode);
 }
-#endif /* __linux__, !__GLIBC__, !*BSD */
+#endif /* !__linux__, !*BSD */
