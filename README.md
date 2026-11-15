@@ -50,9 +50,8 @@ Read [HOW2UPDATE.md](./HOW2UPDATE.md), it's too large to fit here.
 ### (Possible) bugs
 
 This is basically the verbatim implementation from OpenBSD, but, as the
-introduction to this file already mentioned, it is ([mostly](https://github.com/Projeto-Pindorama/opatch/commit/4558398f2ed7224577489cabeda400ccea667d5e#diff-9562c0bae0c928d1c4b9d6bd8ffd0a711f5771fb3d6c19e577e7f347fc4c2cf2))
-portabilized per a single-header library called "baiacu", present at the
-``baiacu.h`` file.  
+introduction to this file already mentioned, it is  portabilized per a
+single-header library called "baiacu", present at the ``baiacu.h`` file.  
 Most of the functions implemented there were already tested and seem to work
 really well but, since nothing is really bullet-proof until a whole lot of
 testing, something might garble in the process.  
