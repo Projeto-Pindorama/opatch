@@ -269,8 +269,8 @@ static inline char *fgetln(FILE *restrict f, size_t *lenp) {
 	     *buf = NULL,
 	     *nbuf = NULL;
 	size_t bufsiz = 0,
-	       nbufsiz = 0,
-	       len = 0;
+	       nbufsiz = 0;
+	ssize_t len = 0;
 
 	if (buf == NULL) {
 		bufsiz = BUFSIZ;
@@ -284,6 +284,7 @@ static inline char *fgetln(FILE *restrict f, size_t *lenp) {
 			nbufsiz = (bufsiz + 256);
 			nbuf = realloc(buf, nbufsiz);
 			if (nbuf == NULL) {
+				free(buf);
 				buf = NULL;
 				len = -1; /* So it will be 0 later. */
 				break;
