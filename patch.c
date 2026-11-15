@@ -1,4 +1,4 @@
-/*	$OpenBSD: patch.c,v 1.77 2024/08/30 07:11:02 op Exp $	*/
+/*	$OpenBSD: patch.c,v 1.79 2026/04/03 12:58:40 kirill Exp $	*/
 
 /*
  * patch - a program to apply diffs to original files
@@ -157,7 +157,7 @@ main(int argc, char *argv[])
 	const	char *tmpdir;
 	char	*v;
 
-	if (pledge("stdio rpath wpath cpath tmppath fattr unveil", NULL) == -1) {
+	if (pledge("stdio rpath wpath cpath fattr unveil", NULL) == -1) {
 		perror("pledge");
 		my_exit(2);
 	}
@@ -257,7 +257,7 @@ main(int argc, char *argv[])
 			perror("unveil");
 			my_exit(2);
 		}
-	if (pledge("stdio rpath wpath cpath tmppath fattr", NULL) == -1) {
+	if (pledge("stdio rpath wpath cpath fattr", NULL) == -1) {
 		perror("pledge");
 		my_exit(2);
 	}
@@ -298,6 +298,12 @@ main(int argc, char *argv[])
 		/* for ed script just up and do it and exit */
 		if (diff_type == ED_DIFF) {
 			do_ed_script();
+			if (ofp)
+				fclose(ofp);
+			ofp = NULL;
+			if (rejfp)
+				fclose(rejfp);
+			rejfp = NULL;
 			continue;
 		}
 
