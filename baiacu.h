@@ -212,6 +212,44 @@ invalid:
 #endif /* OpenBSD < 3.6, FreeBSD < 6.1, NetBSD < 8, !MidnightBSD, !DragonFly */
 
 #ifdef __GLIBC__
+#include <stdbool.h>
+#include <getopt.h>
+/* Define an optreset variable that will be changed inside the program. */
+static int optreset = 0;
+static bool is_optind_set = false;
+/*
+ * Outsource getopt_long from the GNU C library and then
+ * work on compatibility code for supporting optreset.
+ */
+static inline int baiacu_getopt_long(int argc, char *const argv[],
+                  const char *optstring,
+                  const struct option *longopts, int *longindex) {
+	/*
+	 * For sure, that's a pretty awful way of checking
+	 * if we've already set 'optind = !optreset;', but
+	 * let's keep it this way.
+	 */
+	if (!is_optind_set) {
+		optind = !optreset;
+		is_optind_set = true;
+	}
+	return getopt_long(argc, argv, optstring, longopts, longindex);
+}
+#define getopt_long(ac, av, opts, loptgs, lind) \
+	baiacu_getopt_long(ac, av, opts, loptgs, lind)
+static inline size_t strlcpy(char *dst, const char *src, size_t size) {
+	if (size > 0) {
+		(void)strncpy(dst, src, size);
+		dst[size] = '\0';
+	}
+	return strlen(dst);
+}
+static inline size_t strlcat(char *dst, const char *src, size_t size) {
+	size_t lendst = strlen(dst);
+	(void)strncat(dst, src, size);
+	dst[(lendst + size)] = '\0';
+	return strlen(dst);
+}
 static inline char *fgetln(FILE *restrict f, size_t *lenp) {
 	/* Fail if we can't get access to stdio. */
 	if (pledge("stdio", NULL) == -1)
