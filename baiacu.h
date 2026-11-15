@@ -70,7 +70,7 @@ const char *getprogname(void);
 #define D_NAMLEN(e) (e)->d_namlen
 #endif
 
-#if !defined(linux) || (defined(__GLIBC__) \
+#if !defined(__linux__) || (defined(__GLIBC__) \
 	&& (__GLIBC__ >= 2 && __GLIBC_MINOR__ > 25)) \
 	|| !defined(__NetBSD__) || (OpenBSD > 201405) \
 	|| (FreeBSD > 201610)
@@ -172,11 +172,17 @@ static inline long long strtonum(const char numstr[],
 		const char *errstrp[]) {
 	long long r = 0;
 	char *invalid = NULL;
-	*errstrp = NULL;
 	errno = 0; /* Success */
+	/*
+	 * Initialize *errstrp only if the user
+	 * hasn't set it as NULL.
+	 */
+	if (errstrp != NULL)
+		*errstrp = NULL;
 
 	if (minval > maxval) {
-		*errstrp = "minval cannot be larger than the maxval";
+		if (errstrp != NULL)
+			*errstrp = "minval cannot be larger than the maxval";
 invalid:
 		errno = EINVAL;
 		r = 0;
@@ -190,18 +196,22 @@ invalid:
 	switch (errno) {
 		case ERANGE:
 			if (r == LLONG_MIN)
-				*errstrp = "number is smaller than LLONG_MIN";
+				if (errstrp != NULL)
+					*errstrp = "number is smaller than LLONG_MIN";
 			else if (r == LLONG_MAX)
-				*errstrp = "number is larger than LLONG_MAX";
+				if (errstrp != NULL)
+					*errstrp = "number is larger than LLONG_MAX";
 			r = 0;
 			break;
 		default:
 			if (r < minval || maxval < r) {
 				errno = ERANGE;
 				if (r < minval)
-					*errstrp = "number is smaller than the minimal value";
+					if (errstrp != NULL)
+						*errstrp = "number is smaller than the minimal value";
 				else if (maxval < r)
-					*errstrp = "number is larger than the maximum value";
+					if (errstrp != NULL)
+						*errstrp = "number is larger than the maximum value";
 				r = 0;
 			}
 			break;
